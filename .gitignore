@@ -1,0 +1,30 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Environment folder
+myenv/
+*.env
+
+# Database file
+db.sqlite3
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+
+# Django static and media files
+/static/
+/media/
+
+# Migrations
+**/migrations/*
+
+# Byte-compiled files
+*.pyo
+
+# MacOS specific
+.DS_Store
