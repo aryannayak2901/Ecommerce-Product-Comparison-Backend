@@ -3,10 +3,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .serializers.CustomUserSerializer import CustomUserSerializer
-from .models import CustomUser
+from .serializers.ForgotPasswordSerializer import ForgotPasswordSerializer
+from .models import CustomUser, Product
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from datetime import datetime, timedelta
+from django.core.cache import cache  # Use cache to store verified users temporarily
+from django.contrib.auth.hashers import make_password
+from rest_framework.decorators import api_view
+
+from .scraper_service import ScraperService
+
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -42,12 +50,14 @@ class LoginView(APIView):
 
         try:
             user = CustomUser.objects.get(email=email)
-            
+            print("abc login")
             if not user.is_active:
+                print("verified")
                 return Response({"error": "Account is not verified. Please verify OTP."}, status=status.HTTP_400_BAD_REQUEST)
 
             if user.check_password(password):
                 refresh = RefreshToken.for_user(user)
+                print(refresh.access_token, refresh)
                 return Response({
                     'access_token': str(refresh.access_token),
                     'refresh_token': str(refresh),
@@ -88,7 +98,10 @@ class VerifyOTPView(APIView):
                 user.otp_expiry = None
                 user.save()
 
-                return Response({'message': 'OTP verified successfully. You can now log in.'}, status=status.HTTP_200_OK)
+                refresh = RefreshToken.for_user(user)
+                print(refresh.access_token, refresh)
+
+                return Response({'message': 'OTP verified successfully. You can now log in.', 'access_token': str(refresh.access_token), 'refresh_token': str(refresh),}, status=status.HTTP_200_OK)
             return Response({'error': 'Invalid or expired OTP'}, status=status.HTTP_400_BAD_REQUEST)
         except CustomUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -117,3 +130,74 @@ class ResendOTPView(APIView):
             return Response({'message': 'OTP has been resent to your email.'}, status=status.HTTP_200_OK)
         except CustomUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ForgotPasswordView(APIView):
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response({"message": "Password reset OTP sent to your email."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        email = request.data.get('email')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not email or not new_password or not confirm_password:
+            return Response({"message": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != confirm_password:
+            return Response({"message": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if the email was verified via OTP
+        verified_email = cache.get(f'verified_{email}')
+        if not verified_email:
+            return Response({"message": "OTP verification required."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            user = CustomUser.objects.get(email=email)
+            user.password = make_password(new_password)  # Hash the new password
+            user.save()
+            cache.delete(f'verified_{email}')  # Remove the verification flag after successful reset
+            return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
+
+        except CustomUser.DoesNotExist:
+            return Response({"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+
+
+
+
+class ProductSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Extract and validate the search query
+        query = request.query_params.get('query', '').strip()
+        
+        if not query:
+            return Response({"error": "Query parameter is required"}, status=400)
+
+        # Call the scraper service
+        scraper_service = ScraperService()
+        
+        try:
+            products = scraper_service.scrape_products(query)
+            
+            # Return formatted response with additional metadata
+            response_data = {
+                "query": query,
+                "total_products": len(products),
+                "products": products
+            }
+
+            return Response(response_data)
+
+        except Exception as e:
+            # Handle unexpected exceptions gracefully
+            return Response({"error": f"An error occurred: {str(e)}"}, status=500)
+

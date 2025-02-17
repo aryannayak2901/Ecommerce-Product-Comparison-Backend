@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, BooleanField, DateTimeField
+from mongoengine import Document, StringField, BooleanField, DateTimeField, FloatField, URLField, DateTimeField
 from datetime import datetime, timedelta
 from passlib.hash import pbkdf2_sha256
 import random
@@ -30,3 +30,13 @@ class CustomUser(Document):
         self.otp_expiry = datetime.utcnow() + timedelta(minutes=5)  # OTP valid for 5 minutes
         self.save()
         return otp
+
+class Product(Document):
+    title = StringField(required=True)
+    price = FloatField()
+    rating = FloatField()
+    link = URLField()
+    source = StringField()  # "Amazon", "eBay", etc.
+    search_query = StringField(required=True)
+    scraped_at = DateTimeField(default=datetime.utcnow)
+

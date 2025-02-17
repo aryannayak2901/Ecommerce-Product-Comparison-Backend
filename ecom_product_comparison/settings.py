@@ -17,6 +17,9 @@ from mongoengine import connect
 
 from urllib.parse import quote_plus
 
+from datetime import timedelta
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -50,6 +53,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -57,7 +61,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'ecom_product_comparison.urls'
@@ -163,19 +166,33 @@ MONGODB_DATABASES = {
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  # This makes all endpoints require authentication by default
-    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "ecom_product_comparison_app.authentication.MongoDBJWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
 }
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Frontend URL during development
-    "https://yourfrontend.com",  # Your deployed frontend
-]
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),  # Token expires after 1 hour
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),  # Refresh token lasts 7 days
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "email",  # Change this to match your User model field
+    "USER_ID_CLAIM": "user_id",
+}
+
+
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",  # React frontend URL
+# ]
+
+# Allow All Origins for Development
+CORS_ALLOW_ALL_ORIGINS = True  # 🔴 (Use only in development)
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

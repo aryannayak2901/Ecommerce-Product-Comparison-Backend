@@ -24,7 +24,7 @@ from rest_framework_simplejwt.views import (
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Include app-specific URLs
-    path('api/auth/', include('ecom_product_comparison_app.urls')),  # Register, Login, Logout
+    path('api/', include('ecom_product_comparison_app.urls')),  # Register, Login, Logout
 
     # JWT token management
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
