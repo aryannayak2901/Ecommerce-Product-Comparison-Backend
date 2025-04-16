@@ -9,20 +9,19 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecom_product_comparison.setting
 django.setup()
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-RETRY_TIMES = 5
+RETRY_TIMES = 3
 DOWNLOAD_DELAY = 2
+DOWNLOAD_TIMEOUT = 30
+RETRY_HTTP_CODES = [500, 502, 503, 504, 522, 524, 408, 429]
 
 FEEDS = {
-    "output_%(name)s.json": {
+    "%(o)s": {
         "format": "json",
         "encoding": "utf8",
         "indent": 4,
-        "overwrite": True  # Ensures the file is overwritten instead of appending multiple JSON arrays
+        "overwrite": True
     }
 }
-
-
-
 
 # Scrapy settings for product_scraper project
 #
@@ -63,10 +62,11 @@ ROBOTSTXT_OBEY = False
 #TELNETCONSOLE_ENABLED = False
 
 # Override the default request headers:
-#DEFAULT_REQUEST_HEADERS = {
-#    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-#    "Accept-Language": "en",
-#}
+DEFAULT_REQUEST_HEADERS = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+}
 
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
@@ -116,4 +116,9 @@ ROBOTSTXT_OBEY = False
 # Set settings whose default value is deprecated to a future-proof value
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
+
+# Add these settings for better debugging
+LOG_ENABLED = True
+LOG_LEVEL = 'DEBUG'
+LOG_FILE = 'scrapy.log'
 

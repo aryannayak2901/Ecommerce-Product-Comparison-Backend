@@ -10,7 +10,7 @@ from django.core.mail import send_mail
 from datetime import datetime, timedelta
 from django.core.cache import cache  # Use cache to store verified users temporarily
 from django.contrib.auth.hashers import make_password
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 
 from .scraper_service import ScraperService
 
@@ -173,31 +173,88 @@ class ResetPasswordView(APIView):
 
 
 class ProductSearchView(APIView):
+    authentication_classes = []  # No authentication required
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # Extract and validate the search query
-        query = request.query_params.get('query', '').strip()
-        
-        if not query:
-            return Response({"error": "Query parameter is required"}, status=400)
-
-        # Call the scraper service
-        scraper_service = ScraperService()
-        
         try:
-            products = scraper_service.scrape_products(query)
+            query = request.query_params.get('query', '').strip()
             
-            # Return formatted response with additional metadata
-            response_data = {
-                "query": query,
-                "total_products": len(products),
-                "products": products
-            }
+            if not query:
+                return Response({"error": "Query parameter is required"}, status=400)
 
-            return Response(response_data)
+            # Get cached results if they exist
+            cache_key = f'search_results_{query}'
+            cached_results = cache.get(cache_key)
+            
+            if cached_results:
+                # Check if products are still valid
+                product_ids = [p.get('id') for p in cached_results]
+                valid_products = Product.objects(id__in=product_ids, 
+                                              created_at__gte=datetime.utcnow() - timedelta(hours=24))
+                
+                if valid_products.count() == len(cached_results):
+                    return Response({
+                        "query": query,
+                        "total_products": len(cached_results),
+                        "products": cached_results
+                    })
+                else:
+                    # If some products expired, clear cache
+                    cache.delete(cache_key)
+
+            # If no cached results or cache invalid, scrape new data
+            scraper_service = ScraperService()
+            products = scraper_service.scrape_products(query)
+
+            if not products:
+                return Response({
+                    "query": query,
+                    "total_products": 0,
+                    "products": []
+                })
+
+            # Format and save products
+            formatted_products = []
+            for product in products:
+                try:
+                    formatted_product = {
+                        'title': product['name'],
+                        'price': float(product['price'].replace(',', '')),
+                        'source': product['source'],
+                        'link': product['url'],
+                        'image': product['image'],
+                        'rating': float(product['rating']) if product.get('rating') else 0
+                    }
+                    
+                    # Save to database with timestamp
+                    saved_product = Product(
+                        **formatted_product,
+                        search_query=query,
+                        created_at=datetime.utcnow()
+                    ).save()
+                    
+                    formatted_product['id'] = str(saved_product.id)
+                    formatted_products.append(formatted_product)
+                except Exception as e:
+                    print(f"Error formatting product: {str(e)}")
+                    continue
+
+            # Cache results for 1 hour
+            cache.set(cache_key, formatted_products, 3600)
+
+            return Response({
+                "query": query,
+                "total_products": len(formatted_products),
+                "products": formatted_products
+            })
 
         except Exception as e:
-            # Handle unexpected exceptions gracefully
-            return Response({"error": f"An error occurred: {str(e)}"}, status=500)
+            print(f"Search error: {str(e)}")
+            return Response({
+                "error": "An error occurred while processing your request",
+                "query": query,
+                "total_products": 0,
+                "products": []
+            }, status=500)
 

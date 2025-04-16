@@ -50,6 +50,9 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'django_mongoengine',
+    'django_mongoengine.mongo_auth',
+    'django_mongoengine.mongo_admin',
+    'django_cron',
 ]
 
 MIDDLEWARE = [
@@ -139,61 +142,59 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Added Manually
 
-# MongoDB Atlas Configuration
-username=quote_plus("QuantumAutomate")
-password=quote_plus("Aryan2901@")
-
-connect(
-    db="EcomProductComparison",
-    username=username,
-    password=password,
-    host=f"mongodb+srv://{username}:{password}@mongo-practice.r6isy.mongodb.net/",
-    authentication_source='admin'
-)
-
-# MongoDB Atlas Database configuration for django_mongoengine
+# MongoDB Configuration - REMOVE the first connect() call and keep only this one
 MONGODB_DATABASES = {
     'default': {
-        'NAME': 'EcomProductComparison',  # Your MongoDB Atlas database name
-        'HOST': f"mongodb+srv://{username}:{password}@mongo-practice.r6isy.mongodb.net/",  # Your MongoDB Atlas connection string
-        'USERNAME': {username},  # Replace with your MongoDB Atlas username
-        'PASSWORD': {password},  # Replace with your MongoDB Atlas password
-        'AUTH_SOURCE': 'admin',  # Authentication database (default: 'admin')
-        'SSL': True,  # Use SSL (recommended for production)
+        'name': 'EcomProductComparison',
+        'username': quote_plus("QuantumAutomate"),
+        'password': quote_plus("Aryan2901@"),
+        'host': f"mongodb+srv://QuantumAutomate:Aryan2901%40@mongo-practice.r6isy.mongodb.net/",
+        'authentication_source': 'admin'
     }
 }
 
+# Initialize MongoDB connection - Keep only this one connection
+connect(
+    db=MONGODB_DATABASES['default']['name'],
+    username=MONGODB_DATABASES['default']['username'],
+    password=MONGODB_DATABASES['default']['password'],
+    host=MONGODB_DATABASES['default']['host'],
+    authentication_source=MONGODB_DATABASES['default']['authentication_source']
+)
 
+# Add mongoengine authentication backend
+AUTHENTICATION_BACKENDS = [
+    'django_mongoengine.mongo_auth.backends.MongoEngineBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "ecom_product_comparison_app.authentication.MongoDBJWTAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
 
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),  # Token expires after 1 hour
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),  # Refresh token lasts 7 days
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "AUTH_HEADER_TYPES": ("Bearer",),
-    "USER_ID_FIELD": "email",  # Change this to match your User model field
-    "USER_ID_CLAIM": "user_id",
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",  # React frontend URL
-# ]
-
-# Allow All Origins for Development
-CORS_ALLOW_ALL_ORIGINS = True  # 🔴 (Use only in development)
-
+# Add CORS settings
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Your frontend URL
+]
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -202,3 +203,13 @@ EMAIL_HOST_USER = 'eshopweb2901@gmail.com'
 EMAIL_HOST_PASSWORD = 'myuw dsek lyjf kssi'
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
+
+# Add these settings for MongoEngine admin
+MONGOENGINE_USER_DOCUMENT = 'ecom_product_comparison_app.models.CustomUser'
+
+# Add or update these settings
+AUTH_USER_MODEL = 'mongo_auth.MongoUser'
+
+CRON_CLASSES = [
+    'ecom_product_comparison.cron.CleanupProductsCronJob',
+]

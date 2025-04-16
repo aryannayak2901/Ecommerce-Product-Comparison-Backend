@@ -9,23 +9,31 @@ class AmazonSpider(Spider):
         query = getattr(self, 'query', None)
         if query:
             url = f"https://www.amazon.com/s?k={query}"
-            yield Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            self.logger.info(f"Starting Amazon spider with URL: {url}")
+            yield Request(
+                url=url,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                callback=self.parse,
+                errback=self.errback_httpbin,
+                dont_filter=True
+            )
+
+    def errback_httpbin(self, failure):
+        self.logger.error(f"Request failed: {failure.value}")
 
     def parse(self, response):
-        products = response.css('div[role="listitem"]')
-        print("Products are: ", products)
-
+        self.logger.info(f"Parsing Amazon response: {response.url}")
+        products = response.css('div[data-component-type="s-search-result"]')
+        
         for product in products:
-            title = product.css('h2[aria-label] span::text').get()
-            price_whole = product.css('span.a-price-whole::text').get()
-            price_fraction = product.css('span.a-price-fraction::text').get()
-            image_url = product.css('img.s-image::attr(src)').get()
-            
-            if title and price_whole:
-                price = f"{price_whole}.{price_fraction if price_fraction else '00'}"
-                yield {
-                    'title': title.strip(),
-                    'price': price.strip(),
-                    'image_url': image_url,
-                    'source': "Amazon"
-                }
+            yield {
+                'name': product.css('h2 a span::text').get(),
+                'price': product.css('.a-price-whole::text').get('0'),
+                'url': response.urljoin(product.css('h2 a::attr(href)').get()),
+                'image': product.css('img.s-image::attr(src)').get(),
+                'rating': product.css('.a-icon-star-small .a-icon-alt::text').re_first(r'(\d+\.?\d*)'),
+                'source': 'Amazon'
+            }
+            print("product is:  amazon", product)

@@ -2,56 +2,66 @@ import subprocess
 import json
 import os
 import time
+from django.conf import settings
 
 class ScraperService:
     def scrape_products(self, query):
-        results = []
+        try:
+            results = []
+            timestamp = int(time.time())
+            spider_names = ["flipkart_spider", "amazon_spider"]
+            
+            # Get the product_scraper directory path
+            scraper_dir = os.path.join(settings.BASE_DIR, 'product_scraper')
+            
+            for spider_name in spider_names:
+                print("This spider is: ", spider_name)
+                spider_output = f"output_{spider_name}_{timestamp}.json"
+                output_path = os.path.join(scraper_dir, spider_output)
+                
+                print(f"Running spider: {spider_name}")
+                print(f"Output path: {output_path}")
+                print(f"Working directory: {scraper_dir}")
 
-        # Unique filename to avoid duplicate feed errors
-        timestamp = int(time.time())
-        spider_names = ["flipkart_spider", "amazon_spider"]
+                # Run the spider
+                process = subprocess.Popen(
+                    [
+                        "scrapy", "crawl", spider_name,
+                        "-a", f"query={query}",
+                        "-o", output_path
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=scraper_dir
+                )
+                stdout, stderr = process.communicate()
+                
+                print(f"Spider output: {stdout.decode()}")
+                print(f"Spider errors: {stderr.decode()}")
 
-        for spider_name in spider_names:
-            spider_output = f"output_{spider_name}_{timestamp}.json"
-            output_path = os.path.join("product_scraper", spider_output)
+                if process.returncode == 0:
+                    try:
+                        if os.path.exists(output_path):
+                            with open(output_path, 'r') as f:
+                                spider_data = json.load(f)
+                                print(f"Loaded data from {output_path}: {len(spider_data)} products")
+                                results.extend(spider_data)
+                        else:
+                            print(f"Output file not found: {output_path}")
+                    except (json.JSONDecodeError, FileNotFoundError) as e:
+                        print(f"Error processing {spider_output}: {str(e)}")
+                else:
+                    print(f"Spider {spider_name} failed with return code {process.returncode}")
+                    print(f"Error: {stderr.decode()}")
 
-            # Run Scrapy spider
-            process = subprocess.run(
-                ["scrapy", "crawl", spider_name, "-o", spider_output, "-a", f"query={query}"],
-                cwd="product_scraper"
-            )
+                # Cleanup
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                    print(f"Cleaned up {output_path}")
 
-            # Check if the spider ran successfully
-            if process.returncode == 0:
-                try:
-                    # Ensure file has finished writing before reading
-                    time.sleep(1)
-                    with open(output_path, "r") as file:
-                        scraped_data = json.load(file)
-                        print(f"Scraped data from {spider_name}: ", scraped_data)
+            print(f"Total scraped products: {len(results)}")
+            return results
 
-                        # Format the data
-                        formatted_data = [
-                            {
-                                "name": item.get("title", "No title available"),
-                                "price": item.get("price", "N/A"),
-                                "image": item.get("image_url", "https://via.placeholder.com/150"),
-                                "source": spider_name.replace("_spider", "").capitalize(),
-                                "stores": [spider_name.replace("_spider", "").capitalize()]
-                            }
-                            for item in scraped_data
-                        ]
-
-                        results.extend(formatted_data)
-
-                except (FileNotFoundError, json.JSONDecodeError):
-                    print(f"Error reading {spider_output}. Spider may have failed.")
-            else:
-                print(f"Error: Spider '{spider_name}' failed to execute.")
-
-            # Cleanup the JSON file after processing
-            if os.path.exists(output_path):
-                os.remove(output_path)
-
-        print("Final Scraped Results:", results)
-        return results
+        except Exception as e:
+            print(f"Scraping error: {str(e)}")
+            return []
